@@ -2,10 +2,13 @@ import configparser
 import gcpstorage
 import json
 import os
+import s3storage
 import socket
 import sys
 import tarfile
 import time
+
+
 ########################################################################################################################
 # Pseudocode
 #
@@ -26,11 +29,12 @@ def main():
         createBackup(backup_filename, config)
 
         # Call function to upload backup file to cloud destination
-        cloudUpload(backup_filename,config)
+        cloudUpload(backup_filename, config)
 
         # Delete local backup file
         print("[+] Deleting file {file}".format(file=backup_filename))
         os.remove(backup_filename)
+
 
 # Function to create the full path, including file name of the backup tarfile
 def createBackupFilename(config_file):
@@ -45,14 +49,16 @@ def createBackupFilename(config_file):
         local_destination = local_destination + "/"
 
     # Create backup filename
-    backup_filename = str("{host}_backup_{date}_{time}.tar.gz".format(host=socket.gethostname(), date=time.strftime("%d%m%Y"),
-                                                           time=time.strftime("%H%M%S")))
+    backup_filename = str(
+        "{host}_backup_{date}_{time}.tar.gz".format(host=socket.gethostname(), date=time.strftime("%d%m%Y"),
+                                                    time=time.strftime("%H%M%S")))
 
     # Create backup full path
     backup_full_path = local_destination + backup_filename
 
     # Return backup full path
     return backup_full_path
+
 
 # Function to create backup tar file
 def createBackup(backupFile, config_file):
@@ -70,7 +76,7 @@ def createBackup(backupFile, config_file):
         if not os.path.exists(file):
             print("[-] ERROR: {file_name} does not exist & will not be backed up!".format(file_name=file))
         else:
-            backup_file_dir_list.insert(0,file)
+            backup_file_dir_list.insert(0, file)
 
     # Create tar file
     backup_archive = tarfile.open(backupFile, "x")
@@ -82,32 +88,48 @@ def createBackup(backupFile, config_file):
     # Close the backup file
     backup_archive.close()
 
+
 # Function to upload backup file to the cloud
 def cloudUpload(backup_file_path, config_file):
+    # Retrieve the backup file name from the fullpath
+    remote_filename = os.path.basename(backup_file_path)
+
     # Check if GCP is the desired destination
     if str.lower(config_file.get("RemoteDestination", "remotedest")) == "gcp":
         print("[+] GCP Backup selected")
 
         # Retrieve and store project name
-        project = str(config_file.get("RemoteDestination","project"))
+        project = str(config_file.get("GCPStorageInfo", "project"))
 
         # Retrieve and store the bucket name
-        bucket = str(config_file.get("RemoteDestination","bucket"))
-
-        # Retrieve the backup file name from the fullpath
-        remote_filename = os.path.basename(backup_file_path)
+        bucket = str(config_file.get("GCPStorageInfo", "bucket"))
 
         # Set GCP credneitals
         print("[+] Setting GCP credentials")
-        gcpstorage.set_credentials(config_file.get("RemoteDestination","keyfile"))
+        gcpstorage.set_credentials(config_file.get("RemoteDestination", "keyfile"))
 
         # Upload local backup file to GCP bucket
         print("[+] Uploading local backup file to GCP storage")
-        gcpstorage.upload_to_bucket(project,bucket,backup_file_path,remote_filename)
+        gcpstorage.upload_to_bucket(project, bucket, backup_file_path, remote_filename)
 
-    elif str.lower(config_file.get("RemoteDestination","remotedest")) == "s3":
-        sys.exit("[+] WARNING: S3 selected as remote destination, but is not currently supported! Exiting now...")
+    # Check if AWS S3 is the desired destination
+    elif str.lower(config_file.get("RemoteDestination", "remotedest")) == "s3":
+        # Create Remote file name including bucket folder
+        remote_file_full_path = str(config_file.get("S3StorageInfo", "BucketFolder")) + "/" + remote_filename
+        print("[+] Setting S3 remote file to: " + remote_file_full_path)
+
+        # Upload file to S3
+        print("[+] Uploading file to S3 bucket (" + str(config_file.get("S3StorageInfo", "BucketName")) + ")")
+        s3storage.upload_to_bucket(
+            str(config_file.get("S3StorageInfo", "AccessKey")),
+            str(config_file.get("S3StorageInfo", "SecretKey")),
+            str(config_file.get("S3StorageInfo", "AssumedRole")),
+            str(config_file.get("S3StorageInfo", "BucketName")),
+            remote_file_full_path,
+            backup_file_path
+        )
     else:
         sys.exit("[-] ERROR: No remote destination configured. Exiting now...")
+
 
 main()
