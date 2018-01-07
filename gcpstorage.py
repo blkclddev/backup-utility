@@ -1,7 +1,8 @@
 from google.cloud import storage
-#from google.cloud import client
+# from google.cloud import client
 from os import environ
 from sys import exit
+
 
 ########################################################################################################################
 #
@@ -26,6 +27,7 @@ def set_credentials(key_file):
         except KeyError:
             print("ERROR: Unable to set envirnment variable for GCP keyfile! Exiting now...")
             exit()
+
 
 # Function to upload a file to a storage bucket
 def upload_to_bucket(project, bucket, local_file, remote_file):
@@ -77,5 +79,6 @@ def main():
     # Check if the script is running as standalone
     if __name__ == "__main__":
         print("ERROR: This module is designed to be imported by other Python programs.")
+
 
 main()
